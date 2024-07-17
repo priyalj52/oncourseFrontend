@@ -7,7 +7,7 @@ import {
   Text,
   StyleSheet,
   Image,
-  TouchableOpacity 
+  TouchableOpacity,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import io from "socket.io-client";
@@ -31,7 +31,7 @@ export default function ChatScreen() {
       headerTitle: () => <CustomHeader username={username} />,
       headerRight: () => (
         <View style={styles.headerRightContainer}>
-          <Text style={styles.headerRightText}>Score: {totalScore}/10</Text>
+          <Text style={styles.headerRightText}>Score: {totalScore}</Text>
         </View>
       ),
     });
@@ -42,13 +42,10 @@ export default function ChatScreen() {
         const response = await axios.get("http://localhost:8080/patients/case");
         const patient = response.data.patient;
 
-        // Initial greeting message without "Senior AI Doctor"
         const initialGreeting = `Hi, Dr. ${username}. Good to see you.I've been having ${patient.symptoms} lately, and I've noticed I'm experiencing ${patient.additional_info}.`;
 
-        // Dynamic patient-specific message
-
         const question = response.data.message;
-        // Push initial greeting separately
+
         setMessages([
           { text: initialGreeting, fromUser: false, initial: true },
         ]);
@@ -56,7 +53,7 @@ export default function ChatScreen() {
         setTimeout(() => {
           setMessages((prevMessages) => [
             ...prevMessages,
-            { text: question, fromUser: false },
+            { text: question, fromUser: false ,scoreShow:false},
           ]);
         }, 1000);
 
@@ -75,7 +72,7 @@ export default function ChatScreen() {
     socket.on("message", (data) => {
       setMessages((prevMessages) => [
         ...prevMessages,
-        { text: data.response, fromUser: false },
+        { text: data.response, fromUser: false, score: data.score },
       ]);
       if (data.response.includes("Total score:")) {
         const score = data.response.match(/Total score: (\d+)/);
@@ -102,7 +99,6 @@ export default function ChatScreen() {
       setDiagnosisScore(data.diagnosisScore);
     });
 
-
     return () => {
       socket.off("connect");
       socket.off("message");
@@ -127,14 +123,13 @@ export default function ChatScreen() {
 
   const navigateToReportCard = () => {
     // Navigate to ReportCard screen and pass necessary props
-    navigation.navigate('ReportCard', {
-      totalScore: labScore+diagnosisScore, // Pass total score as prop
-      labScore: labScore, // Pass lab score as prop (if applicable)
-      diagnosisScore: diagnosisScore, // Pass diagnosis score as prop (if applicable)
+    navigation.navigate("ReportCard", {
+      username: username,
+      totalScore: totalScore,
+      labScore: labScore,
+      diagnosisScore: diagnosisScore,
     });
   };
-
-
 
   return (
     <View style={styles.container}>
@@ -153,6 +148,10 @@ export default function ChatScreen() {
                     style={styles.profilePic}
                   />
                   <Text>Senior AI Doctor</Text>
+
+                  {item.score && !item.fromUser &&<Text>{item.score}/5</Text> }
+                 
+                  {console.log(item.score, "sccc")}
                 </div>
                 <Text>{item.text}</Text>
               </div>
@@ -186,7 +185,6 @@ export default function ChatScreen() {
       <TouchableOpacity onPress={navigateToReportCard}>
         <Text>View Report Card</Text>
       </TouchableOpacity>
-
     </View>
   );
 }
@@ -205,6 +203,7 @@ const styles = StyleSheet.create({
     padding: 8,
     flexDirection: "row",
     alignItems: "center",
+    
   },
   botMessage: {
     alignSelf: "flex-start",
