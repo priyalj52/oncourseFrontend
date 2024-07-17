@@ -1,62 +1,113 @@
-import React, { useEffect, useState } from 'react';
-import { View, TextInput, Button, FlatList, Text, StyleSheet, Image } from 'react-native';
-import io from 'socket.io-client';
-import axios from 'axios';
-
-const socket = io('http://localhost:8080');
+import React, { useEffect, useState, useLayoutEffect } from "react";
+import {
+  View,
+  TextInput,
+  Button,
+  FlatList,
+  Text,
+  StyleSheet,
+  Image,
+} from "react-native";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import io from "socket.io-client";
+import axios from "axios";
+import CustomHeader from "../components/CustomHeader";
+const socket = io("http://localhost:8080");
 
 export default function ChatScreen() {
+  const route = useRoute();
+  const navigation = useNavigation();
+  const { username, score: initialScore } = route.params;
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [patientId, setPatientId] = useState(null);
-
+  const [totalScore, setTotalScore] = useState(0);
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerTitle: () => <CustomHeader username={username} />,
+      headerRight: () => (
+        <View style={styles.headerRightContainer}>
+          <Text style={styles.headerRightText}>Score: {totalScore}/10</Text>
+        </View>
+      ),
+    });
+  }, [navigation, username, totalScore]);
   useEffect(() => {
     const fetchInitialMessage = async () => {
       try {
-        const response = await axios.get('http://localhost:8080/patients/case');
-        const initialMessage = { text: response.data.message, fromUser: false };
-        setMessages([initialMessage]);
-        setPatientId(response.data.patient.id); // Store the patient ID
+        const response = await axios.get("http://localhost:8080/patients/case");
+        const patient = response.data.patient;
+
+        // Initial greeting message without "Senior AI Doctor"
+        const initialGreeting = `Hi, Dr. ${username}. Good to see you.I've been having ${patient.symptoms} lately, and I've noticed I'm experiencing ${patient.additional_info}.`;
+
+        // Dynamic patient-specific message
+
+        const question = response.data.message;
+        // Push initial greeting separately
+        setMessages([
+          { text: initialGreeting, fromUser: false, initial: true },
+        ]);
+
+        setTimeout(() => {
+          setMessages((prevMessages) => [
+            ...prevMessages,
+            { text: question, fromUser: false },
+          ]);
+        }, 1000);
+
+        setPatientId(patient.id);
       } catch (error) {
-        console.error('Error fetching initial message:', error.message);
+        console.error("Error fetching initial message:", error.message);
       }
     };
 
     fetchInitialMessage();
 
-    socket.on('connect', () => {
-      console.log('Connected to server');
+    socket.on("connect", () => {
+      console.log("Connected to server");
     });
 
-    socket.on('message', (data) => {
+    socket.on("message", (data) => {
       setMessages((prevMessages) => [
         ...prevMessages,
         { text: data.response, fromUser: false },
       ]);
+      if (data.response.includes("Total score:")) {
+        const score = data.response.match(/Total score: (\d+)/);
+        if (score) {
+          setTotalScore(parseInt(score[1]));
+        }
+      }
     });
 
-    socket.on('disconnect', () => {
-      console.log('Disconnected from server');
+    socket.on("disconnect", () => {
+      console.log("Disconnected from server");
     });
 
+    socket.on("totalScore", (data) => {
+      console.log("total", data);
+      setTotalScore(data.totalScore);
+    });
     return () => {
-      socket.off('connect');
-      socket.off('message');
-      socket.off('disconnect');
+      socket.off("connect");
+      socket.off("message");
+      socket.off("disconnect");
     };
   }, []);
-console.log("msgg",messages)
-console.log("input",input)
+
   const sendMessage = () => {
     if (patientId) {
-      const newMessages = [...messages, { text: input, fromUser: true }];
+      const newMessages = [
+        ...messages,
+        { text: input, fromUser: true, initial: false },
+      ];
       setMessages(newMessages);
-   
 
-      socket.emit('message', { userId:patientId, input:input }); // Use stored patient ID
-      setInput('');
+      socket.emit("message", { userId: patientId, input: input }); // Use stored patient ID
+      setInput("");
     } else {
-      console.error('Patient ID is not set.');
+      console.error("Patient ID is not set.");
     }
   };
 
@@ -67,8 +118,35 @@ console.log("input",input)
         keyExtractor={(item, index) => index.toString()}
         renderItem={({ item }) => (
           <View style={item.fromUser ? styles.userMessage : styles.botMessage}>
-            <Text>{item.text}</Text>
-            {item.fromUser && <Image source="https://via.placeholder.com/40"style={styles.profilePic} />}
+            {!item.initial && !item.fromUser && (
+              <div
+                style={{ display: "flex", gap: "5px", flexDirection: "column" }}
+              >
+                <div style={{ display: "flex", gap: "5px" }}>
+                  <Image
+                    source={{ uri: "https://via.placeholder.com/40" }}
+                    style={styles.profilePic}
+                  />
+                  <Text>Senior AI Doctor</Text>
+                </div>
+                <Text>{item.text}</Text>
+              </div>
+            )}
+            {item.fromUser && (
+              <div
+                style={{ display: "flex", gap: "5px", flexDirection: "column" }}
+              >
+                <div style={{ display: "flex", gap: "5px" }}>
+                  <div>You</div>
+                  <Image
+                    source={{ uri: "https://via.placeholder.com/40" }}
+                    style={styles.profilePic}
+                  />
+                </div>
+                <div>{item.text}</div>
+              </div>
+            )}
+            {item.initial && <Text>{item.text}</Text>}
           </View>
         )}
       />
@@ -79,6 +157,7 @@ console.log("input",input)
         placeholder="Type your message here..."
       />
       <Button title="Send" onPress={sendMessage} />
+      {/* <Text style={styles.scoreText}>Total Score: {totalScore}/10</Text> */}
     </View>
   );
 }
@@ -89,24 +168,33 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   userMessage: {
-    alignSelf: 'flex-end',
-    backgroundColor: '#DCF8C6',
+    alignSelf: "flex-end",
+    // backgroundColor: "#DCF8C6",
+    backgroundColor: "#ECECEC",
     borderRadius: 5,
     margin: 4,
     padding: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   botMessage: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#ECECEC',
+    alignSelf: "flex-start",
+    backgroundColor: "#ECECEC",
     borderRadius: 5,
     margin: 4,
     padding: 8,
+  },
+  headerRightText: {
+    borderWidth: 1,
+
+    borderRadius: 5,
+    padding: 8,
+    marginBottom: 8,
+    backgroundColor: "#1C91F2",
   },
   input: {
     borderWidth: 1,
-    borderColor: '#CCC',
+    borderColor: "#CCC",
     borderRadius: 5,
     padding: 8,
     marginBottom: 8,
@@ -117,21 +205,9 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     marginLeft: 8,
   },
+  scoreText: {
+    marginTop: 10,
+    fontSize: 16,
+    fontWeight: "bold",
+  },
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
