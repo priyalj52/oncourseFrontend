@@ -7,6 +7,7 @@ import {
   Text,
   StyleSheet,
   Image,
+  TouchableOpacity 
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import io from "socket.io-client";
@@ -22,6 +23,9 @@ export default function ChatScreen() {
   const [input, setInput] = useState("");
   const [patientId, setPatientId] = useState(null);
   const [totalScore, setTotalScore] = useState(0);
+  const [diagnosisScore, setDiagnosisScore] = useState(0);
+  const [labScore, setLabScore] = useState(0);
+
   useLayoutEffect(() => {
     navigation.setOptions({
       headerTitle: () => <CustomHeader username={username} />,
@@ -89,6 +93,16 @@ export default function ChatScreen() {
       console.log("total", data);
       setTotalScore(data.totalScore);
     });
+    socket.on("labScore", (data) => {
+      console.log("labScore", data);
+      setLabScore(data.labScore);
+    });
+    socket.on("diagnosisScore", (data) => {
+      console.log("diagnosisScore", data);
+      setDiagnosisScore(data.diagnosisScore);
+    });
+
+
     return () => {
       socket.off("connect");
       socket.off("message");
@@ -110,6 +124,17 @@ export default function ChatScreen() {
       console.error("Patient ID is not set.");
     }
   };
+
+  const navigateToReportCard = () => {
+    // Navigate to ReportCard screen and pass necessary props
+    navigation.navigate('ReportCard', {
+      totalScore: labScore+diagnosisScore, // Pass total score as prop
+      labScore: labScore, // Pass lab score as prop (if applicable)
+      diagnosisScore: diagnosisScore, // Pass diagnosis score as prop (if applicable)
+    });
+  };
+
+
 
   return (
     <View style={styles.container}>
@@ -158,6 +183,10 @@ export default function ChatScreen() {
       />
       <Button title="Send" onPress={sendMessage} />
       {/* <Text style={styles.scoreText}>Total Score: {totalScore}/10</Text> */}
+      <TouchableOpacity onPress={navigateToReportCard}>
+        <Text>View Report Card</Text>
+      </TouchableOpacity>
+
     </View>
   );
 }
